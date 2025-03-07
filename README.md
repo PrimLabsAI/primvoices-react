@@ -31,7 +31,7 @@ function App() {
       config={{
         serverUrl: 'wss://your-primvoices-server.com/socket',
         agentId: 'your-agent-id',
-        voiceId: 'your-voice-id',
+        versionStatus: 'staged',
       }}
     >
       <div>
@@ -79,7 +79,7 @@ The context provider that needs to wrap all PrimVoices components:
 <PrimVoicesProvider
   config={{
     agentId: 'default',
-    voiceId: 'default',
+    versionStatus: 'staged',
     debug: false,
   }}
   autoConnect={false}
@@ -152,7 +152,7 @@ import { WebSocketClient } from 'primvoices-react';
 const client = new WebSocketClient({
   serverUrl: 'wss://your-server.com/socket',
   agentId: 'default',
-  voiceId: 'default',
+  versionStatus: 'staged',
   debug: true,
 });
 
@@ -237,7 +237,7 @@ function App() {
       config={{
         serverUrl: 'wss://your-server.com/socket',
         agentId: 'default',
-        voiceId: 'default',
+        versionStatus: 'staged',
       }}
     >
       <MyCustomComponent />
@@ -252,12 +252,12 @@ export default App;
 
 The `WebSocketClientConfig` interface supports the following options:
 
-| Property    | Type    | Description                                            | Default                    |
-|-------------|---------|--------------------------------------------------------|----------------------------|
-| serverUrl   | string  | WebSocket server URL                                   | 'wss://tts.primvoices.com' |
-| agentId     | string  | Identifier for the AI agent                            | 'default'                  |
-| voiceId     | string  | Voice to use for responses                             | 'default'                  |
-| debug       | boolean | Enable debug logging                                   | false                      |
+| Property          | Type    | Description                                            | Default                    |
+|-------------------|---------|--------------------------------------------------------|----------------------------|
+| serverUrl         | string  | WebSocket server URL                                   | 'wss://tts.primvoices.com' |
+| agentId           | string  | Identifier for the AI agent                            | 'default'                  |
+| versionStatus     | string  | Identifier for the AI version                          | 'staged'                   |
+| debug             | boolean | Enable debug logging                                   | false                      |
 
 ## Development
 
