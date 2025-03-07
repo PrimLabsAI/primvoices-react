@@ -23,9 +23,14 @@ export interface WebSocketClientConfig {
   debug?: boolean;
 }
 
+/**
+ * Audio statistics containing level and speech detection information
+ * isPlayback indicates whether these stats are for playback audio (true) or microphone input (false)
+ */
 export interface AudioStats {
   level: number;
   isSpeaking: boolean;
+  isPlayback?: boolean; // Indicates if the stats are for playback or microphone audio
 }
 
 export type AudioDataCallback = (audioData: Float32Array) => void;
@@ -459,6 +464,8 @@ export class WebSocketClient {
    */
   public disconnect(): void {
     this.stopListening();
+    this.clearAudioQueue();
+    this.stopAudioStatsMonitoring();
     
     if (this.socket) {
       this.socket.close();
@@ -466,10 +473,9 @@ export class WebSocketClient {
     }
     
     this.isConnected = false;
-    this.clearAudioQueue();
     
-    if (this.config.debug) {
-      console.log('[WebSocketClient] Disconnected');
+    if (this.onConnectionClose) {
+      this.onConnectionClose();
     }
   }
 
@@ -637,15 +643,29 @@ export class WebSocketClient {
   }
 
   /**
-   * Clear the audio playback queue
+   * Clear the audio playback queue and stop any current playback
    */
   private clearAudioQueue(): void {
     this.audioQueue = [];
     
-    // Stop current playback
     if (this.currentAudioSource) {
-      this.currentAudioSource.stop();
-      this.currentAudioSource.disconnect();
+      // Disconnect from analyzer first
+      if (this.analyser) {
+        try {
+          this.currentAudioSource.disconnect(this.analyser);
+        } catch (error) {
+          // Ignore errors if already disconnected
+        }
+      }
+      
+      // Stop and disconnect the current source
+      try {
+        this.currentAudioSource.stop();
+        this.currentAudioSource.disconnect();
+      } catch (error) {
+        // Ignore errors if already stopped
+      }
+      
       this.currentAudioSource = null;
     }
     
@@ -658,6 +678,11 @@ export class WebSocketClient {
   private playNextInQueue(): void {
     if (!this.audioContext || this.audioQueue.length === 0) {
       this.isPlaying = false;
+      
+      // If we're not listening from the microphone, stop audio monitoring
+      if (!this.isListening) {
+        this.stopAudioStatsMonitoring();
+      }
       
       if (this.onPlayStop) {
         this.onPlayStop();
@@ -679,6 +704,13 @@ export class WebSocketClient {
     // Create a source node and connect it to the destination
     this.currentAudioSource = this.audioContext.createBufferSource();
     this.currentAudioSource.buffer = audioBuffer;
+    
+    // Connect to the analyzer for monitoring playback audio levels
+    if (this.analyser) {
+      this.currentAudioSource.connect(this.analyser);
+    }
+    
+    // Connect to the destination for playback
     this.currentAudioSource.connect(this.audioContext.destination);
     
     // When this chunk finishes playing, play the next one
@@ -695,6 +727,11 @@ export class WebSocketClient {
     this.currentAudioSource.start();
     this.isPlaying = true;
     
+    // Start monitoring audio stats if not already monitoring
+    if (!this.statsInterval) {
+      this.startAudioStatsMonitoring();
+    }
+    
     // Trigger callback if this is the start of playback
     if (this.onPlayStart && this.audioQueue.length === 0) {
       this.onPlayStart();
@@ -703,6 +740,7 @@ export class WebSocketClient {
 
   /**
    * Get the current audio level (volume) from the analyzer
+   * This works for both microphone input and audio playback, depending on what's currently active
    */
   public getAudioLevel(): number {
     if (!this.analyser) return 0;
@@ -736,7 +774,8 @@ export class WebSocketClient {
       if (this.onAudioStats) {
         this.onAudioStats({
           level,
-          isSpeaking
+          isSpeaking,
+          isPlayback: this.isPlaying // Indicate if these stats are from playback
         });
       }
       
@@ -753,8 +792,11 @@ export class WebSocketClient {
    */
   private stopAudioStatsMonitoring(): void {
     if (this.statsInterval) {
-      clearInterval(this.statsInterval);
-      this.statsInterval = null;
+      // Only stop monitoring if neither listening nor playing is active
+      if (!this.isListening && !this.isPlaying) {
+        clearInterval(this.statsInterval);
+        this.statsInterval = null;
+      }
     }
   }
 
