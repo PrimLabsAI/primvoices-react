@@ -10,6 +10,8 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import * as alawmulaw from 'alawmulaw';
+
 import { Logger } from './Logger';
 
 const logger = new Logger();
@@ -342,11 +344,7 @@ export class WebSocketClient {
       
       // Request microphone access
       this.mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: true,
         video: false 
       });
       
@@ -507,7 +505,7 @@ export class WebSocketClient {
       }
       
       // Convert PCM to μ-law as in audio.ts
-      const muLawData = this.linearToMuLaw(int16Data);
+      const muLawData = alawmulaw.mulaw.encode(int16Data);
       
       if (this.config.debug) {
         console.log(`[WebSocketClient] Converted to μ-law format: ${muLawData.length} bytes`);
@@ -547,57 +545,6 @@ export class WebSocketClient {
       binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary);
-  }
-
-  /**
-   * Convert linear PCM to muLaw - matches audio.ts implementation
-   */
-  private linearToMuLaw(pcmData: Int16Array): Uint8Array {
-    const BIAS = 33;
-    const CLIP = 32635;
-    const result = new Uint8Array(pcmData.length);
-
-    for (let i = 0; i < pcmData.length; i++) {
-      // Get the sample value
-      let sample = pcmData[i];
-
-      // Get the sign bit
-      const sign = sample < 0 ? 0x80 : 0;
-
-      // Get absolute value of sample
-      if (sign) {
-        sample = -sample;
-      }
-
-      // Clip the sample
-      sample = Math.min(sample, CLIP);
-
-      // Add bias
-      sample += BIAS;
-
-      // Compute logarithm
-      let exponent = 7;
-      let compressedSample = 0;
-
-      // Find the first bit that is set
-      for (let j = 10; j >= 0; j--) {
-        if ((sample & (1 << j)) !== 0) {
-          exponent = Math.floor(j / 2);
-          break;
-        }
-      }
-
-      // Get mantissa (the 4 bits that follow the implicit 1)
-      const mantissa = (sample >> (exponent + 3)) & 0x0f;
-
-      // Combine exponent and mantissa
-      compressedSample = (exponent << 4) | mantissa;
-
-      // Apply sign bit and invert (μ-law specific)
-      result[i] = ~(sign | compressedSample) & 0xff;
-    }
-
-    return result;
   }
 
   /**
