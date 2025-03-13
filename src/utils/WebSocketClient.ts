@@ -119,7 +119,7 @@ export class WebSocketClient {
   /**
    * Initialize the WebSocket connection
    */
-  public connect(): void {        
+  public async connect(): Promise<void> {        
     // Generate unique IDs for this session
     this.callSid = uuidv4();
     this.streamSid = uuidv4();
@@ -135,85 +135,85 @@ export class WebSocketClient {
     
     // Create and setup new WebSocket connection
     this.socket = new WebSocket(this.config.serverUrl);
-    this.setupSocketHandlers();
-  
+
     logger.debug(`[WebSocketClient] Connecting to ${this.config.serverUrl}`);
     logger.debug(`[WebSocketClient] Session IDs: call=${this.callSid}, stream=${this.streamSid}`);
-  }
 
-  /**
-   * Setup WebSocket event handlers
-   */
-  private setupSocketHandlers(): void {
-    if (!this.socket) return;
+    return new Promise((resolve, reject) => {        
+      if (!this.socket) {
+        reject(new Error('WebSocket not initialized'));
+        return;
+      }
+
+      this.socket.onopen = () => {
+        this.isConnected = true;
         
-    this.socket.onopen = () => {
-      this.isConnected = true;
-      
-      // Send start message following the format in audio.ts
-      const startMessage = {
-        start: {
-          streamSid: this.streamSid,
-          callSid: this.callSid,
-          customParameters: {
-            inputType: 'mic',
-            agentId: this.config.agentId || 'default',
-            versionStatus: this.config.versionStatus || 'staged',
+        // Send start message following the format in audio.ts
+        const startMessage = {
+          start: {
+            streamSid: this.streamSid,
+            callSid: this.callSid,
+            customParameters: {
+              inputType: 'mic',
+              agentId: this.config.agentId || 'default',
+              versionStatus: this.config.versionStatus || 'staged',
+            },
           },
-        },
+        };
+        
+        // Send the start message
+        this.socket?.send(JSON.stringify(startMessage));
+      
+        logger.debug('[WebSocketClient] Connection established');
+        logger.debug('[WebSocketClient] Sent start message:', startMessage);
+        
+        if (this.onConnectionOpen) {
+          this.onConnectionOpen();
+          resolve();
+        }
       };
       
-      // Send the start message
-      this.socket?.send(JSON.stringify(startMessage));
-    
-      logger.debug('[WebSocketClient] Connection established');
-      logger.debug('[WebSocketClient] Sent start message:', startMessage);
+      this.socket.onclose = () => {
+        this.isConnected = false;
+        if (this.config.debug) {
+          console.log('[WebSocketClient] Connection closed');
+        }
+        if (this.onConnectionClose) {
+          this.onConnectionClose();
+        }
+        this.stopListening();
+      };
       
-      if (this.onConnectionOpen) {
-        this.onConnectionOpen();
-      }
-    };
-    
-    this.socket.onclose = () => {
-      this.isConnected = false;
-      if (this.config.debug) {
-        console.log('[WebSocketClient] Connection closed');
-      }
-      if (this.onConnectionClose) {
-        this.onConnectionClose();
-      }
-      this.stopListening();
-    };
-    
-    this.socket.onerror = (error) => {
-      if (this.config.debug) {
-        console.error('[WebSocketClient] WebSocket error:', error);
-      }
-      if (this.onConnectionError) {
-        this.onConnectionError();
-      }
-    };
-    
-    this.socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        // Handle different message types
-        if (data.event === 'media') {
-          this.handleAudioMessage(data);
-        } else if (data.event === 'clear') {
-          this.handleClearMessage(data);
-        } else if (data.event === 'transcript') {
-          if (this.onAgentMessage && data.text) {
-            this.onAgentMessage(data.text);
+      this.socket.onerror = (error) => {
+        if (this.config.debug) {
+          console.error('[WebSocketClient] WebSocket error:', error);
+        }
+        if (this.onConnectionError) {
+          this.onConnectionError();
+        }
+      };
+      
+      this.socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          // Handle different message types
+          if (data.event === 'media') {
+            this.handleAudioMessage(data);
+          } else if (data.event === 'clear') {
+            this.handleClearMessage(data);
+          } else if (data.event === 'transcript') {
+            if (this.onAgentMessage && data.text) {
+              this.onAgentMessage(data.text);
+            }
+          }
+        } catch (error) {
+          if (this.config.debug) {
+            console.error('[WebSocketClient] Error parsing message:', error);
           }
         }
-      } catch (error) {
-        if (this.config.debug) {
-          console.error('[WebSocketClient] Error parsing message:', error);
-        }
-      }
-    };
+      };
+    });
   }
 
   /**
