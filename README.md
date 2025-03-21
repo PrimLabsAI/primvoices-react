@@ -1,293 +1,192 @@
-# PrimVoices React
+# PrimVoices React Integration
 
-A React client library for integrating with the PrimVoices WebSocket API. This library provides components and utilities for creating voice-enabled applications that can send and receive audio over WebSockets.
+A React library for integrating PrimVoices Agent functionality into your applications. This library provides a WebSocket-based client for real-time audio communication with the PrimVoices API.
 
 ## Features
 
-- 🎤 Send microphone audio to PrimVoices API
-- 🔊 Receive and play audio responses
-- 💬 Handle conversation transcriptions
-- 📊 Audio visualization and speech detection
-- 🧩 Multiple components from headless to fully styled
-- 🔌 Easy integration with existing React applications
+- 🎤 Real-time microphone input capture
+- 🔊 High-quality audio playback
+- 📊 Audio level monitoring and speech detection
+- ⚡ WebSocket-based communication
+- 🎯 React Context integration
 
 ## Installation
 
 ```bash
 npm install primvoices-react
+# or
+yarn add primvoices-react
 ```
 
-## Basic Usage
-
-Here's a simple example of how to use the PrimVoices React components:
+## Quick Start
 
 ```jsx
-import React from 'react';
-import { PrimVoicesProvider, BasicAudioConversation } from 'primvoices-react';
+import { PrimVoicesProvider, usePrimVoices } from 'primvoices-react';
 
+// Configure the provider
+const config = {
+  agentId: 'your-agent-id',
+  version: 'staged',
+  logLevel: 'ERROR'
+};
+
+// Wrap your app with the provider
 function App() {
   return (
-    <PrimVoicesProvider
-      config={{
-        serverUrl: 'wss://your-primvoices-server.com/socket',
-        agentId: 'your-agent-id',
-        voiceId: 'your-voice-id',
-      }}
-    >
-      <div>
-        <h1>Voice Chat Example</h1>
-        <BasicAudioConversation 
-          autoConnect={true}
-          welcomeMessage="Hello! Click the button to start talking."
-        />
-      </div>
+    <PrimVoicesProvider config={config} autoConnect={true}>
+      <YourComponent />
     </PrimVoicesProvider>
   );
 }
 
-export default App;
-```
-
-## Running the Examples
-
-To run the examples and see the library in action:
-
-```bash
-git clone https://github.com/PrimLabsAI/primvoices-react.git
-cd primvoices-react
-npm install
-npm run examples
-```
-
-This will start a development server and open the examples in your browser.
-
-The examples showcase different components and usage patterns:
-- Basic usage of the three main components
-- Direct WebSocket client usage
-- Hook-based custom UI components
-- Configuration options
-
-See the [examples directory](./examples/) for more details.
-
-## Available Components
-
-### 1. PrimVoicesProvider
-
-The context provider that needs to wrap all PrimVoices components:
-
-```jsx
-<PrimVoicesProvider
-  config={{
-    agentId: 'default',
-    voiceId: 'default',
-    debug: false,
-  }}
-  autoConnect={false}
->
-  {/* Your components here */}
-</PrimVoicesProvider>
-```
-
-### 2. HeadlessAudioConversation
-
-A headless component (no UI) that provides functionality you can build upon:
-
-```jsx
-<HeadlessAudioConversation
-  autoConnect={true}
-  autoStartListening={false}
-  onConnect={() => console.log('Connected')}
-  onDisconnect={() => console.log('Disconnected')}
-  onListeningStart={() => console.log('Started listening')}
-  onListeningStop={() => console.log('Stopped listening')}
-  onPlayingStart={() => console.log('Started playing')}
-  onPlayingStop={() => console.log('Stopped playing')}
-  onMessage={(message) => console.log('New message:', message)}
-  onError={(error) => console.error('Error:', error)}
-/>
-```
-
-### 3. BasicAudioConversation
-
-A simple component with minimal UI:
-
-```jsx
-<BasicAudioConversation
-  autoConnect={true}
-  welcomeMessage="Hello! I'm ready to chat."
-  containerClassName="custom-container"
-  buttonClassName="custom-button"
-  messageClassName="custom-message"
-  errorClassName="custom-error"
-  onMessage={(message) => console.log('New message:', message)}
-  onError={(error) => console.error('Error:', error)}
-/>
-```
-
-### 4. AdvancedAudioConversation
-
-A full-featured component with chat interface and audio visualization:
-
-```jsx
-<AdvancedAudioConversation
-  autoConnect={true}
-  welcomeMessage="Hello! How can I help you today?"
-  agentName="Assistant"
-  userName="You"
-  containerClassName="custom-container"
-  chatClassName="custom-chat"
-  buttonClassName="custom-button"
-  onMessage={(message) => console.log('New message:', message)}
-  onError={(error) => console.error('Error:', error)}
-/>
-```
-
-## Direct WebSocket Client Usage
-
-If you need more control, you can use the WebSocketClient directly:
-
-```jsx
-import { WebSocketClient } from 'primvoices-react';
-
-const client = new WebSocketClient({
-  serverUrl: 'wss://your-server.com/socket',
-  agentId: 'default',
-  voiceId: 'default',
-  debug: true,
-});
-
-// Set up callbacks
-client.setCallbacks({
-  onOpen: () => console.log('Connected'),
-  onClose: () => console.log('Disconnected'),
-  onError: () => console.log('Error occurred'),
-  onMessage: (message) => console.log('Message received:', message),
-  onListeningStart: () => console.log('Started listening'),
-  onListeningStop: () => console.log('Stopped listening'),
-  onAudioStart: () => console.log('Started playing audio'),
-  onAudioStop: () => console.log('Stopped playing audio'),
-  onAudioStats: (stats) => console.log('Audio stats:', stats),
-});
-
-// Connect to the server
-client.connect();
-
-// Start listening (recording from microphone)
-client.startListening();
-
-// Stop listening
-client.stopListening();
-
-// Disconnect
-client.disconnect();
-```
-
-## Custom Integration with usePrimVoices Hook
-
-For advanced use cases, you can use the hook to access the PrimVoices context:
-
-```jsx
-import React from 'react';
-import { PrimVoicesProvider, usePrimVoices } from 'primvoices-react';
-
-function MyCustomComponent() {
+// Use the hook in your components
+function YourComponent() {
   const {
     connect,
     disconnect,
     startListening,
     stopListening,
+    sendTextEvent,
     isConnected,
     isListening,
     isPlaying,
-    messages,
     audioStats,
-    error,
+    error
   } = usePrimVoices();
+
+  // Your component logic here
+}
+```
+
+## API Reference
+
+### PrimVoicesProvider
+
+The main provider component that sets up the WebSocket client and context.
+
+#### Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| config | WebSocketClientConfig | Yes | Configuration for the WebSocket client |
+| autoConnect | boolean | No | Whether to connect automatically on mount |
+| children | ReactNode | Yes | Child components |
+
+#### WebSocketClientConfig
+
+| Property | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| agentId | string | Yes | - | Your PrimVoices agent ID |
+| version | string | No | 'staged' | API version to use |
+| logLevel | 'DEBUG' \| 'INFO' \| 'WARN' \| 'ERROR' | No | 'ERROR' | Logging level |
+
+### usePrimVoices Hook
+
+The hook provides access to all PrimVoices functionality.
+
+#### Returns
+
+| Property | Type | Description |
+|----------|------|-------------|
+| connect | () => void | Connect to the WebSocket server |
+| disconnect | () => void | Disconnect from the WebSocket server |
+| startListening | () => Promise<void> | Start capturing audio from microphone |
+| stopListening | () => void | Stop capturing audio from microphone |
+| sendTextEvent | (text: string) => void | Send a text message to the server |
+| isConnected | boolean | Connection status |
+| isListening | boolean | Microphone capture status |
+| isPlaying | boolean | Audio playback status |
+| audioStats | AudioStats \| null | Current audio statistics |
+| error | string \| null | Error message if any |
+
+#### AudioStats Interface
+
+```typescript
+interface AudioStats {
+  level: number;        // Audio level (0-1)
+  isSpeaking: boolean;  // Speech detection status
+  isPlayback?: boolean; // Whether stats are for playback
+}
+```
+
+## Technical Details
+
+### Audio Processing
+
+- Input audio is captured at the system's native sample rate
+- Automatically downsampled to 16kHz for transmission
+- Converted to μ-law encoding for efficient transfer
+- Real-time audio level monitoring and speech detection
+- Supports both microphone input and audio playback
+
+### WebSocket Communication
+
+- Bi-directional audio streaming
+- Automatic reconnection handling
+- Session management with unique call and stream IDs
+- Support for text events
+- Error handling and status monitoring
+
+## Example Usage
+
+```jsx
+function VoiceChat() {
+  const {
+    connect,
+    startListening,
+    stopListening,
+    isConnected,
+    isListening,
+    audioStats
+  } = usePrimVoices();
+
+  useEffect(() => {
+    // Connect on component mount
+    connect();
+    return () => disconnect();
+  }, []);
 
   return (
     <div>
-      <button onClick={connect} disabled={isConnected}>
-        Connect
-      </button>
-      <button onClick={disconnect} disabled={!isConnected}>
-        Disconnect
-      </button>
-      <button 
-        onClick={isListening ? stopListening : startListening}
-        disabled={!isConnected}
+      <button
+        onClick={() => isListening ? stopListening() : startListening()}
       >
-        {isListening ? 'Stop Listening' : 'Start Listening'}
+        {isListening ? 'Stop' : 'Start'} Listening
       </button>
       
-      <div>
-        <h3>Messages:</h3>
-        {messages.map((message, index) => (
-          <div key={index}>{message}</div>
-        ))}
-      </div>
-      
-      {error && <div style={{ color: 'red' }}>Error: {error}</div>}
+      {audioStats && (
+        <div>
+          Audio Level: {audioStats.level}
+          Speaking: {audioStats.isSpeaking ? 'Yes' : 'No'}
+        </div>
+      )}
     </div>
   );
 }
-
-function App() {
-  return (
-    <PrimVoicesProvider
-      config={{
-        serverUrl: 'wss://your-server.com/socket',
-        agentId: 'default',
-        voiceId: 'default',
-      }}
-    >
-      <MyCustomComponent />
-    </PrimVoicesProvider>
-  );
-}
-
-export default App;
 ```
 
-## Configuration Options
+## Best Practices
 
-The `WebSocketClientConfig` interface supports the following options:
+1. Always wrap your application or the relevant component tree with `PrimVoicesProvider`
+2. Handle connection errors appropriately
+3. Clean up resources by calling `disconnect` when done
+4. Monitor `audioStats` for audio level visualization
+5. Use `isConnected` status to show connection state
+6. Handle microphone permissions appropriately
 
-| Property    | Type    | Description                                            | Default                    |
-|-------------|---------|--------------------------------------------------------|----------------------------|
-| serverUrl   | string  | WebSocket server URL                                   | 'wss://tts.primvoices.com' |
-| agentId     | string  | Identifier for the AI agent                            | 'default'                  |
-| voiceId     | string  | Voice to use for responses                             | 'default'                  |
-| debug       | boolean | Enable debug logging                                   | false                      |
+## Browser Support
 
-## Development
-
-```bash
-# Clone the repository
-git clone https://github.com/PrimLabsAI/primvoices-react.git
-
-# Install dependencies
-cd primvoices-react
-npm install
-
-# Build the library
-npm run build
-
-# Run the examples
-npm run examples
-
-# Run tests
-npm test
-```
-
-## Browser Compatibility
-
-This library requires support for the Web Audio API and WebSockets. It has been tested and works with:
-
-- Chrome 76+
-- Firefox 70+
-- Safari 13+
+- Chrome 74+
+- Firefox 75+
+- Safari 14.1+
 - Edge 79+
+
+Requires browser support for:
+- WebSocket API
+- Web Audio API
+- MediaDevices API
+- AudioWorklet (with fallback to ScriptProcessorNode)
 
 ## License
 
-MIT 
+MIT License
