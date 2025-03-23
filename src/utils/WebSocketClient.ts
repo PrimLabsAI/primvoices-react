@@ -25,6 +25,20 @@ export interface WebSocketClientConfig {
   version?: string;
 }
 
+interface Mark {
+  sequenceNumber: number;
+  mark: {
+    name: string;
+  };
+}
+
+// Add interface for queued audio item
+interface QueuedAudioItem {
+  data: Float32Array;
+  sampleRate: number;
+  mark?: Mark; 
+}
+
 /**
  * Audio statistics containing level and speech detection information
  * isPlayback indicates whether these stats are for playback audio (true) or microphone input (false)
@@ -46,7 +60,7 @@ export class WebSocketClient {
   private microphoneSource: MediaStreamAudioSourceNode | null = null;
   private audioWorklet: AudioWorkletNode | null = null;
   private analyser: AnalyserNode | null = null;
-  private audioQueue: { data: Float32Array; sampleRate: number }[] = [];
+  private audioQueue: QueuedAudioItem[] = [];
   private currentAudioSource: AudioBufferSourceNode | null = null;
   private workletInitialized = false;
   private isListening = false;
@@ -202,12 +216,14 @@ export class WebSocketClient {
       this.socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           // Handle different message types
           if (data.event === 'media') {
             this.handleAudioMessage(data);
           } else if (data.event === 'clear') {
             this.handleClearMessage(data);
+          } else if (data.event === 'mark') {
+            this.handleMarkMessage(data);
           }
         } catch (error) {
           logger.error('[WebSocketClient] Error parsing message:', error);
@@ -254,6 +270,7 @@ export class WebSocketClient {
     }
     
     // Add to audio queue for playback with 24kHz sample rate
+    // Include mark if it exists in the data
     this.addToAudioQueue(floatData, 24000);
   }
 
@@ -261,6 +278,21 @@ export class WebSocketClient {
     logger.info('[WebSocketClient] Received clear message:', data);
 
     this.clearAudioQueue();
+  }
+
+  /**
+   * Handle mark events received from the server
+   * These marks will be associated with the next audio chunk received
+   */
+  private handleMarkMessage(data: Mark): void {
+    logger.info(`[WebSocketClient] Received mark event: ${data.sequenceNumber} ${data.mark?.name}`);
+
+    const mark = {
+      sequenceNumber: data.sequenceNumber,
+      mark: data.mark,
+    };
+
+    this.addToAudioQueue(new Float32Array(0), 24000, mark);
   }
 
   /**
@@ -562,8 +594,8 @@ export class WebSocketClient {
   /**
    * Add audio data to the playback queue
    */
-  private addToAudioQueue(audioData: Float32Array, sampleRate = 16000): void {
-    this.audioQueue.push({ data: audioData, sampleRate });
+  private addToAudioQueue(audioData: Float32Array, sampleRate = 16000, mark?: Mark): void {
+    this.audioQueue.push({ data: audioData, sampleRate, mark });
     
     // Start playing if not already playing
     if (!this.isPlaying) {
@@ -624,7 +656,23 @@ export class WebSocketClient {
     const audioItem = this.audioQueue.shift();
     if (!audioItem) return;
     
-    const { data: audioData, sampleRate } = audioItem;
+    const { data: audioData, sampleRate, mark } = audioItem;
+
+    //
+    if (mark) {
+      if (mark && this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({
+          event: 'mark',
+          streamSid: this.streamSid,
+          sequenceNumber: mark.sequenceNumber,
+          mark: mark.mark
+        }));
+        logger.debug(`[WebSocketClient] Sent mark event: ${mark}`);
+      }
+      
+      this.playNextInQueue();
+      return;
+    }
     
     // Create an audio buffer with the appropriate sample rate
     const audioBuffer = this.audioContext.createBuffer(1, audioData.length, sampleRate);
@@ -642,8 +690,8 @@ export class WebSocketClient {
     // Connect to the destination for playback
     this.currentAudioSource.connect(this.audioContext.destination);
     
-    // When this chunk finishes playing, play the next one
-    this.currentAudioSource.onended = () => {
+    // When this chunk finishes playing, send mark event if exists and play the next one
+    this.currentAudioSource.onended = () => {      
       if (this.currentAudioSource) {
         this.currentAudioSource.disconnect();
         this.currentAudioSource = null;
