@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { WebSocketClient, WebSocketClientConfig, AudioStats } from '../utils/WebSocketClient';
+import { WebSocketClient, WebSocketClientConfig, AudioStats, DebugMessage } from '../utils/WebSocketClient';
 
 // Define the context shape
 interface PrimVoicesContextType {
@@ -12,6 +12,7 @@ interface PrimVoicesContextType {
   isListening: boolean;
   isPlaying: boolean;
   audioStats: AudioStats | null;
+  debugMessages: DebugMessage[];
   error: string | null;
 }
 
@@ -26,6 +27,7 @@ const PrimVoicesContext = createContext<PrimVoicesContextType>({
   isListening: false,
   isPlaying: false,
   audioStats: null,
+  debugMessages: [],
   error: null,
 });
 
@@ -52,6 +54,7 @@ export const PrimVoicesProvider: React.FC<PrimVoicesProviderProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioStats, setAudioStats] = useState<AudioStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [debugMessages, setDebugMessages] = useState<DebugMessage[]>([]);
 
   // Initialize client on mount
   useEffect(() => {
@@ -84,6 +87,9 @@ export const PrimVoicesProvider: React.FC<PrimVoicesProviderProps> = ({
         },
         onAudioStats: (stats) => {
           setAudioStats(stats);
+        },
+        onDebugMessage: (messages) => {
+          setDebugMessages(messages);
         },
       });
       
@@ -170,6 +176,7 @@ export const PrimVoicesProvider: React.FC<PrimVoicesProviderProps> = ({
     isListening,
     isPlaying,
     audioStats,
+    debugMessages,
     error,
   };
 

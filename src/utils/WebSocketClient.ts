@@ -26,17 +26,21 @@ export interface WebSocketClientConfig {
 }
 
 interface Mark {
-  sequenceNumber: number;
   mark: {
     name: string;
   };
 }
 
-// Add interface for queued audio item
 interface QueuedAudioItem {
   data: Float32Array;
   sampleRate: number;
   mark?: Mark; 
+}
+
+export interface DebugMessage {
+  name: string;
+  type: string;
+  data: Record<string, unknown>;
 }
 
 /**
@@ -51,6 +55,7 @@ export interface AudioStats {
 
 export type AudioDataCallback = (audioData: Float32Array) => void;
 export type AudioStatsCallback = (stats: AudioStats) => void;
+export type DebugMessageCallback = (messages: DebugMessage[]) => void;
 export type StatusCallback = () => void;
 
 export class WebSocketClient {
@@ -62,6 +67,7 @@ export class WebSocketClient {
   private analyser: AnalyserNode | null = null;
   private audioQueue: QueuedAudioItem[] = [];
   private currentAudioSource: AudioBufferSourceNode | null = null;
+  private debugQueue: DebugMessage[] = [];
   private workletInitialized = false;
   private isListening = false;
   private isConnected = false;
@@ -81,6 +87,7 @@ export class WebSocketClient {
   private onPlayStart: StatusCallback | null = null;
   private onPlayStop: StatusCallback | null = null;
   private onAudioStats: AudioStatsCallback | null = null;
+  private onDebugMessage: DebugMessageCallback | null = null;
 
   constructor(config: WebSocketClientConfig) {
     this.config = {
@@ -108,6 +115,7 @@ export class WebSocketClient {
     onAudioStart,
     onAudioStop,
     onAudioStats,
+    onDebugMessage,
   }: {
     onOpen?: StatusCallback;
     onClose?: StatusCallback;
@@ -117,6 +125,7 @@ export class WebSocketClient {
     onAudioStart?: StatusCallback;
     onAudioStop?: StatusCallback;
     onAudioStats?: AudioStatsCallback;
+    onDebugMessage?: DebugMessageCallback;
   }): void {
     this.onConnectionOpen = onOpen || null;
     this.onConnectionClose = onClose || null;
@@ -126,6 +135,7 @@ export class WebSocketClient {
     this.onPlayStart = onAudioStart || null;
     this.onPlayStop = onAudioStop || null;
     this.onAudioStats = onAudioStats || null;
+    this.onDebugMessage = onDebugMessage || null;
   }
 
   /**
@@ -224,6 +234,8 @@ export class WebSocketClient {
             this.handleClearMessage(data);
           } else if (data.event === 'mark') {
             this.handleMarkMessage(data);
+          } else if (data.event === 'debug') {
+            this.handleDebugMessage(data);
           }
         } catch (error) {
           logger.error('[WebSocketClient] Error parsing message:', error);
@@ -285,14 +297,26 @@ export class WebSocketClient {
    * These marks will be associated with the next audio chunk received
    */
   private handleMarkMessage(data: Mark): void {
-    logger.info(`[WebSocketClient] Received mark event: ${data.sequenceNumber} ${data.mark?.name}`);
+    logger.info(`[WebSocketClient] Received mark event: ${data.mark?.name}`);
 
     const mark = {
-      sequenceNumber: data.sequenceNumber,
       mark: data.mark,
     };
 
     this.addToAudioQueue(new Float32Array(0), 24000, mark);
+  }
+
+  /**
+   * Handle debug messages received from the server
+   */
+  private handleDebugMessage(data: any): void {
+    logger.info('[WebSocketClient] Received debug message:', data);
+
+    this.debugQueue.push(data);
+
+    if (this.onDebugMessage) {
+      this.onDebugMessage(this.debugQueue);
+    }
   }
 
   /**
@@ -658,13 +682,11 @@ export class WebSocketClient {
     
     const { data: audioData, sampleRate, mark } = audioItem;
 
-    //
     if (mark) {
       if (mark && this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({
           event: 'mark',
           streamSid: this.streamSid,
-          sequenceNumber: mark.sequenceNumber,
           mark: mark.mark
         }));
         logger.debug(`[WebSocketClient] Sent mark event: ${mark}`);

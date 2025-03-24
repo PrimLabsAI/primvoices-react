@@ -7,6 +7,7 @@ export type {
   AudioStatsCallback,
   StatusCallback, 
   WebSocketClientConfig, 
+  DebugMessage,
 } from './utils/WebSocketClient';
 
 // Export context provider and hook
