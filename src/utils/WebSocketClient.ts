@@ -38,8 +38,9 @@ interface QueuedAudioItem {
 }
 
 export interface DebugMessage {
-  name: string;
   type: string;
+  turn: number;
+  name: string;
   data: Record<string, unknown>;
 }
 
@@ -509,6 +510,7 @@ export class WebSocketClient {
   public disconnect(): void {
     this.stopListening();
     this.clearAudioQueue();
+    this.clearDebugQueue();
     this.stopAudioStatsMonitoring();
     
     if (this.socket) {
@@ -655,6 +657,17 @@ export class WebSocketClient {
     }
     
     this.isPlaying = false;
+  }
+
+  /**
+   * Clear the debug queue
+   */
+  private clearDebugQueue(): void {
+    this.debugQueue = [];
+
+    if (this.onDebugMessage) {
+      this.onDebugMessage([]);
+    }
   }
 
   /**
