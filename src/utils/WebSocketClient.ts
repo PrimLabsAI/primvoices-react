@@ -20,9 +20,10 @@ const logger = new Logger();
 // Types for configuration and callbacks
 export interface WebSocketClientConfig {
   agentId: string;
+  functionId?: string;
+  environment?: string;
   logLevel?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
   serverUrl?: string;
-  version?: string;
 }
 
 interface Mark {
@@ -93,7 +94,6 @@ export class WebSocketClient {
   constructor(config: WebSocketClientConfig) {
     this.config = {
       serverUrl: 'wss://tts.primvoices.com/ws',
-      version: 'staged',
       logLevel: 'ERROR',
       ...config,
     };
@@ -183,10 +183,8 @@ export class WebSocketClient {
             customParameters: {
               inputType: 'mic',
               agentId: this.config.agentId,
-              version: this.config.version || 'staged',
-
-              // Backwards compatibility:
-              versionStatus: this.config.version || 'staged',
+              functionId: this.config.functionId,
+              environment: this.config.environment,
             },
           },
         };
