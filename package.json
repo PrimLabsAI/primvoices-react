@@ -1,7 +1,7 @@
 {
   "name": "primvoices-react",
-  "version": "0.1.0",
-  "description": "React client for the PrimVoices WebSocket API with audio conversation components",
+  "version": "0.1.1",
+  "description": "React client for the PrimVoices Agents API",
   "type": "module",
   "main": "./dist/index.umd.js",
   "module": "./dist/index.es.js",

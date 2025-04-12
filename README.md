@@ -26,7 +26,7 @@ import { PrimVoicesProvider, usePrimVoices } from 'primvoices-react';
 // Configure the provider
 const config = {
   agentId: 'your-agent-id',
-  version: 'staged',
+  environment: 'staging',
   logLevel: 'ERROR'
 };
 
@@ -77,7 +77,8 @@ The main provider component that sets up the WebSocket client and context.
 | Property | Type | Required | Default | Description |
 |----------|------|----------|---------|-------------|
 | agentId | string | Yes | - | Your PrimVoices agent ID |
-| version | string | No | 'staged' | API version to use |
+| environment | string | Yes | 'production' | Agent environment to use |
+| functionId | string | No | 'staged' | Agent function id to use (defaults to functionId of "environment") |
 | logLevel | 'DEBUG' \| 'INFO' \| 'WARN' \| 'ERROR' | No | 'ERROR' | Logging level |
 
 ### usePrimVoices Hook
