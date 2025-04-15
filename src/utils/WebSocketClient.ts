@@ -147,6 +147,9 @@ export class WebSocketClient {
     this.callSid = uuidv4();
     this.streamSid = uuidv4();
     
+    // Remove any debug messages from the previous session
+    this.clearDebugQueue();
+    
     // Close existing connection if there is one
     if (this.socket) {
       this.socket.close();
@@ -508,7 +511,6 @@ export class WebSocketClient {
   public disconnect(): void {
     this.stopListening();
     this.clearAudioQueue();
-    this.clearDebugQueue();
     this.stopAudioStatsMonitoring();
     
     if (this.socket) {
