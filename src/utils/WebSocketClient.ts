@@ -24,6 +24,8 @@ export interface WebSocketClientConfig {
   environment?: string;
   logLevel?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
   serverUrl?: string;
+  apiUrl?: string;
+  customParameters?: Record<string, string>,
 }
 
 interface Mark {
@@ -93,8 +95,9 @@ export class WebSocketClient {
 
   constructor(config: WebSocketClientConfig) {
     this.config = {
-      serverUrl: 'wss://tts.primvoices.com/ws',
+      apiUrl: 'https://api.primvoices.com',
       logLevel: 'ERROR',
+      customParameters: {},
       ...config,
     };
 
@@ -139,6 +142,30 @@ export class WebSocketClient {
     this.onDebugMessage = onDebugMessage || null;
   }
 
+  public async getAgentConfiguration(): Promise<{ url: string, parameters: Record<string, string> }> {
+    const queryParams = new URLSearchParams();
+    queryParams.set('inputType', 'mic');
+    queryParams.set('environment', this.config.environment || '');
+
+    if (this.config.customParameters) {
+      Object.entries(this.config.customParameters).forEach(([key, value]) => {
+        queryParams.set(`custom_${key}`, value);
+      });
+    }
+    
+    const response = await fetch(`${this.config.apiUrl}/v1/agents/${this.config.agentId}/call?${queryParams.toString()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    const responseJson = await response.json();
+
+    return responseJson.data;
+  }
+
   /**
    * Initialize the WebSocket connection
    */
@@ -155,12 +182,17 @@ export class WebSocketClient {
       this.socket.close();
     }
 
-    if (!this.config.serverUrl) {
-      throw new Error('Server URL is required');
+    if (!this.config.agentId) {
+      throw new Error('agentId is required');
     }
 
-    if (!this.config.agentId) {
-      throw new Error('Agent ID is required');
+    if (!this.config.serverUrl) {
+      const agentConfiguration = await this.getAgentConfiguration();
+
+      logger.info('[WebSocketClient] Agent configuration:', agentConfiguration);
+
+      this.config.serverUrl = agentConfiguration.url;
+      this.config.customParameters = agentConfiguration.parameters;
     }
     
     // Create and setup new WebSocket connection
@@ -183,12 +215,7 @@ export class WebSocketClient {
           start: {
             streamSid: this.streamSid,
             callSid: this.callSid,
-            customParameters: {
-              inputType: 'mic',
-              agentId: this.config.agentId,
-              functionId: this.config.functionId,
-              environment: this.config.environment,
-            },
+            customParameters: this.config.customParameters,
           },
         };
         
