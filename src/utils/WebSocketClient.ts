@@ -10,10 +10,10 @@
  * - Managing the lifecycle of an audio conversation
  */
 
-import { v4 as uuidv4 } from 'uuid';
-import * as alawmulaw from 'alawmulaw';
+import { v4 as uuidv4 } from "uuid";
+import * as alawmulaw from "alawmulaw";
 
-import { Logger } from './Logger';
+import { Logger } from "./Logger";
 
 const logger = new Logger();
 
@@ -22,7 +22,8 @@ export interface WebSocketClientConfig {
   agentId: string;
   functionId?: string;
   environment?: string;
-  logLevel?: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+  strategy?: "cascade" | "sts";
+  logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
   serverUrl?: string;
   apiUrl?: string;
   customParameters?: Record<string, string>,
@@ -76,8 +77,8 @@ export class WebSocketClient {
   private isListening = false;
   private isConnected = false;
   private isPlaying = false;
-  private callSid = '';
-  private streamSid = '';
+  private callSid = "";
+  private streamSid = "";
   private config: WebSocketClientConfig;
   private speechDetected = false;
   private statsInterval: number | null = null;
@@ -95,13 +96,13 @@ export class WebSocketClient {
 
   constructor(config: WebSocketClientConfig) {
     this.config = {
-      apiUrl: 'https://api.primvoices.com',
-      logLevel: 'ERROR',
+      apiUrl: "https://api.primvoices.com",
+      logLevel: "ERROR",
       customParameters: {},
       ...config,
     };
 
-    logger.setLogLevel(this.config.logLevel || 'ERROR');
+    logger.setLogLevel(this.config.logLevel || "ERROR");
     
     // Initialize the audio context
     this.initAudioContext();
@@ -144,8 +145,8 @@ export class WebSocketClient {
 
   public async getAgentConfiguration(): Promise<{ url: string, parameters: Record<string, string> }> {
     const queryParams = new URLSearchParams();
-    queryParams.set('inputType', 'mic');
-    queryParams.set('environment', this.config.environment || '');
+    queryParams.set("inputType", "mic");
+    queryParams.set("environment", this.config.environment || "");
 
     if (this.config.customParameters) {
       Object.entries(this.config.customParameters).forEach(([key, value]) => {
@@ -154,9 +155,9 @@ export class WebSocketClient {
     }
     
     const response = await fetch(`${this.config.apiUrl}/v1/agents/${this.config.agentId}/call?${queryParams.toString()}`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({}),
     });
@@ -183,13 +184,13 @@ export class WebSocketClient {
     }
 
     if (!this.config.agentId) {
-      throw new Error('agentId is required');
+      throw new Error("agentId is required");
     }
 
     if (!this.config.serverUrl) {
       const agentConfiguration = await this.getAgentConfiguration();
 
-      logger.info('[WebSocketClient] Agent configuration:', agentConfiguration);
+      logger.info("[WebSocketClient] Agent configuration:", agentConfiguration);
 
       this.config.serverUrl = agentConfiguration.url;
       this.config.customParameters = agentConfiguration.parameters;
@@ -203,7 +204,7 @@ export class WebSocketClient {
 
     return new Promise((resolve, reject) => {        
       if (!this.socket) {
-        reject(new Error('WebSocket not initialized'));
+        reject(new Error("WebSocket not initialized"));
         return;
       }
 
@@ -222,8 +223,8 @@ export class WebSocketClient {
         // Send the start message
         this.socket?.send(JSON.stringify(startMessage));
       
-        logger.info('[WebSocketClient] Connection established');
-        logger.info('[WebSocketClient] Sent start message:', startMessage);
+        logger.info("[WebSocketClient] Connection established");
+        logger.info("[WebSocketClient] Sent start message:", startMessage);
         
         if (this.onConnectionOpen) {
           this.onConnectionOpen();
@@ -235,7 +236,7 @@ export class WebSocketClient {
       this.socket.onclose = () => {
         this.isConnected = false;
 
-        logger.info('[WebSocketClient] Connection closed');
+        logger.info("[WebSocketClient] Connection closed");
 
         if (this.onConnectionClose) {
           this.onConnectionClose();
@@ -245,7 +246,7 @@ export class WebSocketClient {
       };
       
       this.socket.onerror = (error) => {
-        logger.error('[WebSocketClient] WebSocket error:', error);
+        logger.error("[WebSocketClient] WebSocket error:", error);
 
         if (this.onConnectionError) {
           this.onConnectionError();
@@ -257,17 +258,17 @@ export class WebSocketClient {
           const data = JSON.parse(event.data);
 
           // Handle different message types
-          if (data.event === 'media') {
+          if (data.event === "media") {
             this.handleAudioMessage(data);
-          } else if (data.event === 'clear') {
+          } else if (data.event === "clear") {
             this.handleClearMessage(data);
-          } else if (data.event === 'mark') {
+          } else if (data.event === "mark") {
             this.handleMarkMessage(data);
-          } else if (data.event === 'debug') {
+          } else if (data.event === "debug") {
             this.handleDebugMessage(data);
           }
         } catch (error) {
-          logger.error('[WebSocketClient] Error parsing message:', error);
+          logger.error("[WebSocketClient] Error parsing message:", error);
         }
       };
     });
@@ -316,7 +317,7 @@ export class WebSocketClient {
   }
 
   private handleClearMessage(data: any): void {
-    logger.info('[WebSocketClient] Received clear message:', data);
+    logger.info("[WebSocketClient] Received clear message:", data);
 
     this.clearAudioQueue();
   }
@@ -339,7 +340,7 @@ export class WebSocketClient {
    * Handle debug messages received from the server
    */
   private handleDebugMessage(data: any): void {
-    logger.info('[WebSocketClient] Received debug message:', data);
+    logger.info("[WebSocketClient] Received debug message:", data);
 
     this.debugQueue.push(data);
 
@@ -367,7 +368,7 @@ export class WebSocketClient {
             }
           
             handleMessage(event) {
-              if (event.data.command === 'stop') {
+              if (event.data.command === "stop") {
                 // Handle stop command if needed
               }
             }
@@ -389,10 +390,10 @@ export class WebSocketClient {
             }
           }
           
-          registerProcessor('audio-processor', AudioProcessor);
+          registerProcessor("audio-processor", AudioProcessor);
         `;
         
-        const blob = new Blob([workletCode], { type: 'application/javascript' });
+        const blob = new Blob([workletCode], { type: "application/javascript" });
         const blobURL = URL.createObjectURL(blob);
         
         await this.audioContext.audioWorklet.addModule(blobURL);
@@ -400,10 +401,10 @@ export class WebSocketClient {
         
         this.workletInitialized = true;
         
-        logger.info('[WebSocketClient] Audio worklet initialized');
+        logger.info("[WebSocketClient] Audio worklet initialized");
       }
     } catch (error) {
-      logger.error('[WebSocketClient] Error initializing audio context:', error);
+      logger.error("[WebSocketClient] Error initializing audio context:", error);
     }
   }
 
@@ -414,8 +415,8 @@ export class WebSocketClient {
     if (this.isListening || !this.isConnected) return;
     
     try {
-      // Resume audio context if it's suspended
-      if (this.audioContext?.state === 'suspended') {
+      // Resume audio context if it"s suspended
+      if (this.audioContext?.state === "suspended") {
         await this.audioContext.resume();
       }
       
@@ -426,7 +427,7 @@ export class WebSocketClient {
       });
       
       if (!this.audioContext) {
-        throw new Error('Audio context not initialized');
+        throw new Error("Audio context not initialized");
       }
       
       // Create microphone source and connect it to the audio graph
@@ -434,7 +435,7 @@ export class WebSocketClient {
       
       if (this.workletInitialized) {
         // Use the audio worklet for processing
-        this.audioWorklet = new AudioWorkletNode(this.audioContext, 'audio-processor');
+        this.audioWorklet = new AudioWorkletNode(this.audioContext, "audio-processor");
         this.microphoneSource.connect(this.audioWorklet);
         
         if (this.analyser) {
@@ -449,7 +450,7 @@ export class WebSocketClient {
         };
       } else {
         // Fallback to ScriptProcessorNode (deprecated but more widely supported)
-        logger.warn('[WebSocketClient] Using ScriptProcessorNode fallback');
+        logger.warn("[WebSocketClient] Using ScriptProcessorNode fallback");
 
         const bufferSize = 4096;
         const scriptProcessor = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
@@ -477,9 +478,9 @@ export class WebSocketClient {
         this.onStartListening();
       }
       
-      logger.info('[WebSocketClient] Started listening');
+      logger.info("[WebSocketClient] Started listening");
     } catch (error) {
-      logger.error('[WebSocketClient] Error starting microphone:', error);
+      logger.error("[WebSocketClient] Error starting microphone:", error);
 
       this.isListening = false;
     }
@@ -517,7 +518,7 @@ export class WebSocketClient {
       this.onStopListening();
     }
     
-    logger.info('[WebSocketClient] Stopped listening');
+    logger.info("[WebSocketClient] Stopped listening");
   }
 
   /**
@@ -525,11 +526,11 @@ export class WebSocketClient {
    */
   public sendTextEvent(text: string): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-      logger.error('[WebSocketClient] Cannot send text message: WebSocket is not open');
+      logger.error("[WebSocketClient] Cannot send text message: WebSocket is not open");
       return;
     }
 
-    this.socket.send(JSON.stringify({ event: 'text', text }));
+    this.socket.send(JSON.stringify({ event: "text", text }));
   }
 
   /**
@@ -565,7 +566,7 @@ export class WebSocketClient {
       // Twilio expects 16kHz μ-law encoded audio, as in audio.ts
       const targetSampleRate = 16000;
       
-      // Check if there's sound in the input data
+      // Check if there"s sound in the input data
       const hasSound = inputData.some((value) => Math.abs(value) > 0.01);
       logger.debug(`[WebSocketClient] Processing audio frame: ${inputData.length} samples at ${sampleRate}Hz ${hasSound ? "(has sound)" : "(silent)"}`);
       
@@ -585,7 +586,7 @@ export class WebSocketClient {
       
       // Send via WebSocket - match format in audio.ts exactly
       const message = {
-        event: 'media',
+        event: "media",
         streamSid: this.streamSid,
         media: {
           payload: base64Data
@@ -596,7 +597,7 @@ export class WebSocketClient {
       
       logger.debug(`[WebSocketClient] Sent μ-law encoded audio: ${base64Data.length} base64 chars`);
     } catch (error) {
-      logger.error('[WebSocketClient] Error processing or sending audio:', error);
+      logger.error("[WebSocketClient] Error processing or sending audio:", error);
     }
   }
 
@@ -606,7 +607,7 @@ export class WebSocketClient {
   private arrayBufferToBase64(buffer: ArrayBufferLike): string {
     const bytes = new Uint8Array(buffer);
 
-    let binary = '';
+    let binary = "";
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
@@ -704,7 +705,7 @@ export class WebSocketClient {
     if (!this.audioContext || this.audioQueue.length === 0) {
       this.isPlaying = false;
       
-      // If we're not listening from the microphone, stop audio monitoring
+      // If we"re not listening from the microphone, stop audio monitoring
       if (!this.isListening) {
         this.stopAudioStatsMonitoring();
       }
@@ -725,7 +726,7 @@ export class WebSocketClient {
     if (mark) {
       if (mark && this.socket && this.socket.readyState === WebSocket.OPEN) {
         this.socket.send(JSON.stringify({
-          event: 'mark',
+          event: "mark",
           streamSid: this.streamSid,
           mark: mark.mark
         }));
@@ -779,7 +780,7 @@ export class WebSocketClient {
 
   /**
    * Get the current audio level (volume) from the analyzer
-   * This works for both microphone input and audio playback, depending on what's currently active
+   * This works for both microphone input and audio playback, depending on what"s currently active
    */
   public getAudioLevel(): number {
     if (!this.analyser) return 0;

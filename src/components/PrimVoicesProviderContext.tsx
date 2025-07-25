@@ -89,7 +89,7 @@ export const PrimVoicesProvider: React.FC<PrimVoicesProviderProps> = ({
           setAudioStats(stats);
         },
         onDebugMessage: (messages) => {
-          setDebugMessages(messages);
+          setDebugMessages([...messages]);
         },
       });
       
