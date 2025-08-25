@@ -319,6 +319,21 @@ export class WebSocketClient {
   private handleClearMessage(data: any): void {
     logger.info("[WebSocketClient] Received clear message:", data);
 
+    // Send all mark events to the server in the order they were received.
+    // This replicates the behavior of Twilio's SDK on clear.
+    this.audioQueue.forEach((item) => {
+      if (item.mark && this.socket && this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ 
+          event: "mark", 
+          mark: item.mark,
+          streamSid: this.streamSid,
+        }));
+
+        logger.debug(`[WebSocketClient] Sent mark event: ${item}`);
+      }
+    });
+
+    // Clear the audio queue.
     this.clearAudioQueue();
   }
 
