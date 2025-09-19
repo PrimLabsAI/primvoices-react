@@ -212,12 +212,20 @@ export class WebSocketClient {
       this.socket.onopen = () => {
         this.isConnected = true;
         
+        // Build custom parameters with enforced essentials
+        const params = {
+          ...(this.config.customParameters || {}),
+          agentId: this.config.agentId,
+          environment: this.config.environment || "",
+          inputType: "mic",
+        } as Record<string, string>;
+        
         // Send start message following the format in audio.ts
         const startMessage = {
           start: {
             streamSid: this.streamSid,
             callSid: this.callSid,
-            customParameters: this.config.customParameters,
+            customParameters: params,
           },
         };
         
@@ -388,6 +396,15 @@ export class WebSocketClient {
         // Reconnect to the new agent
         this.config.agentId = agentId;
         this.config.environment = environment;
+        // Keep existing serverUrl to avoid CORS on API fetch; just update params
+        this.config.customParameters = {
+          ...(this.config.customParameters || {}),
+          agentId: this.config.agentId,
+          environment: this.config.environment || "",
+          inputType: "mic",
+        };
+
+        logger.info(`[WebSocketClient] Redirecting to agent=${agentId} env=${environment}`);
         await this.connect();
         await this.startListening();
       }
