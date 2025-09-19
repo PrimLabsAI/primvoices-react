@@ -82,6 +82,9 @@ export class WebSocketClient {
   private config: WebSocketClientConfig;
   private speechDetected = false;
   private statsInterval: number | null = null;
+  private initialAgentId: string;
+  private initialEnvironment?: string;
+  private redirected = false;
 
   // Callbacks
   private onConnectionOpen: StatusCallback | null = null;
@@ -102,6 +105,10 @@ export class WebSocketClient {
       customParameters: {},
       ...config,
     };
+
+    // Capture initial target so we can restore it after a redirect
+    this.initialAgentId = this.config.agentId;
+    this.initialEnvironment = this.config.environment;
 
     logger.setLogLevel(this.config.logLevel || "ERROR");
     
@@ -405,6 +412,7 @@ export class WebSocketClient {
         };
 
         logger.info(`[WebSocketClient] Redirecting to agent=${agentId} env=${environment}`);
+        this.redirected = true;
         await this.connect();
         await this.startListening();
       }
@@ -612,6 +620,21 @@ export class WebSocketClient {
     
     this.isConnected = false;
     
+    // If we had redirected, restore initial agent/environment so the next connect
+    // returns to the original target unless app overrides explicitly.
+    if (this.redirected) {
+      this.config.agentId = this.initialAgentId;
+      this.config.environment = this.initialEnvironment;
+      this.config.customParameters = {
+        ...(this.config.customParameters || {}),
+        agentId: this.config.agentId,
+        environment: this.config.environment || "",
+        inputType: "mic",
+      };
+      this.redirected = false;
+      logger.info(`[WebSocketClient] Restored initial agent after redirect: agent=${this.config.agentId} env=${this.config.environment}`);
+    }
+
     if (this.onConnectionClose) {
       this.onConnectionClose();
     }
