@@ -96,6 +96,7 @@ export class WebSocketClient {
   private onPlayStop: StatusCallback | null = null;
   private onAudioStats: AudioStatsCallback | null = null;
   private onDebugMessage: DebugMessageCallback | null = null;
+  private lastRedirectKey: string | null = null;
   
   constructor(config: WebSocketClientConfig) {
     this.config = {
@@ -388,6 +389,18 @@ export class WebSocketClient {
         const environment = (data?.data?.environment as string) || this.config.environment || "";
         
         if (!agentId) return;
+
+        // Idempotence: skip if already targeting the same agent/environment
+        const key = `${agentId}|${environment || ""}`;
+        const alreadyAtTarget =
+          agentId === this.config.agentId &&
+          (environment || "") === (this.config.environment || "") &&
+          this.socket &&
+          (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING);
+
+        if (alreadyAtTarget || this.lastRedirectKey === key) {
+          return;
+        }
         
         // Quiesce current session
         this.stopListening();
@@ -398,6 +411,7 @@ export class WebSocketClient {
         this.config.agentId = agentId;
         this.config.environment = environment || this.config.environment;
         this.redirected = true; // Mark that a redirect occurred
+        this.lastRedirectKey = key;
         
         // Reconnect to the new agent
         this.connect()
@@ -607,6 +621,8 @@ export class WebSocketClient {
     }
     
     this.isConnected = false;
+    // Clear last redirect idempotence key on explicit disconnect
+    this.lastRedirectKey = null;
     
     // If we had redirected, restore initial agent/environment so the next connect
     // returns to the original target unless app overrides explicitly.
