@@ -96,8 +96,7 @@ export class WebSocketClient {
   private onPlayStop: StatusCallback | null = null;
   private onAudioStats: AudioStatsCallback | null = null;
   private onDebugMessage: DebugMessageCallback | null = null;
-  private seenRedirects: Set<string> = new Set();
-
+  
   constructor(config: WebSocketClientConfig) {
     this.config = {
       apiUrl: "https://api.primvoices.com",
@@ -387,34 +386,23 @@ export class WebSocketClient {
       if (data.name === "redirect") {
         const agentId = data?.data?.agentId as string;
         const environment = (data?.data?.environment as string) || this.config.environment || "";
-        const redirectId = data?.data?.redirectId as string | undefined;
-
+        
         if (!agentId) return;
-        if (redirectId) {
-          if (this.seenRedirects.has(redirectId)) return;
-          this.seenRedirects.add(redirectId);
-        }
-
+        
         // Quiesce current session
         this.stopListening();
         this.clearAudioQueue();
-        try { this.socket?.close(); } catch {}
+        this.socket?.close();
 
-        // Reconnect to the new agent
+        // Update config for the new agent
         this.config.agentId = agentId;
-        this.config.environment = environment;
-        // Keep existing serverUrl to avoid CORS on API fetch; just update params
-        this.config.customParameters = {
-          ...(this.config.customParameters || {}),
-          agentId: this.config.agentId,
-          environment: this.config.environment || "",
-          inputType: "mic",
-        };
-
-        logger.info(`[WebSocketClient] Redirecting to agent=${agentId} env=${environment}`);
-        this.redirected = true;
-        await this.connect();
-        await this.startListening();
+        this.config.environment = environment || this.config.environment;
+        this.redirected = true; // Mark that a redirect occurred
+        
+        // Reconnect to the new agent
+        this.connect()
+          .then(() => this.startListening())
+          .catch((error) => logger.error("[WebSocketClient] Error during redirect reconnect:", error));
       }
     } catch (e) {
       logger.error("[WebSocketClient] Error handling control message:", e);
