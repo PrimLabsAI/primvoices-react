@@ -82,6 +82,9 @@ export class WebSocketClient {
   private config: WebSocketClientConfig;
   private speechDetected = false;
   private statsInterval: number | null = null;
+  private initialAgentId: string;
+  private initialEnvironment?: string;
+  private redirected = false;
 
   // Callbacks
   private onConnectionOpen: StatusCallback | null = null;
@@ -93,7 +96,8 @@ export class WebSocketClient {
   private onPlayStop: StatusCallback | null = null;
   private onAudioStats: AudioStatsCallback | null = null;
   private onDebugMessage: DebugMessageCallback | null = null;
-
+  private lastRedirectKey: string | null = null;
+  
   constructor(config: WebSocketClientConfig) {
     this.config = {
       apiUrl: "https://api.primvoices.com",
@@ -101,6 +105,10 @@ export class WebSocketClient {
       customParameters: {},
       ...config,
     };
+
+    // Capture initial target so we can restore it after a redirect
+    this.initialAgentId = this.config.agentId;
+    this.initialEnvironment = this.config.environment;
 
     logger.setLogLevel(this.config.logLevel || "ERROR");
     
@@ -211,12 +219,20 @@ export class WebSocketClient {
       this.socket.onopen = () => {
         this.isConnected = true;
         
+        // Build custom parameters with enforced essentials
+        const params = {
+          ...(this.config.customParameters || {}),
+          agentId: this.config.agentId,
+          environment: this.config.environment || "",
+          inputType: "mic",
+        } as Record<string, string>;
+        
         // Send start message following the format in audio.ts
         const startMessage = {
           start: {
             streamSid: this.streamSid,
             callSid: this.callSid,
-            customParameters: this.config.customParameters,
+            customParameters: params,
           },
         };
         
@@ -266,6 +282,8 @@ export class WebSocketClient {
             this.handleMarkMessage(data);
           } else if (data.event === "debug") {
             this.handleDebugMessage(data);
+          } else if (data.event === "control") {
+            this.handleControlMessage(data);
           }
         } catch (error) {
           logger.error("[WebSocketClient] Error parsing message:", error);
@@ -361,6 +379,47 @@ export class WebSocketClient {
 
     if (this.onDebugMessage) {
       this.onDebugMessage(this.debugQueue);
+    }
+  }
+
+  private async handleControlMessage(data: any): Promise<void> {
+    try {
+      if (data.name === "redirect") {
+        const agentId = data?.data?.agentId as string;
+        const environment = (data?.data?.environment as string) || this.config.environment || "";
+        
+        if (!agentId) return;
+
+        // Idempotence: skip if already targeting the same agent/environment
+        const key = `${agentId}|${environment || ""}`;
+        const alreadyAtTarget =
+          agentId === this.config.agentId &&
+          (environment || "") === (this.config.environment || "") &&
+          this.socket &&
+          (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING);
+
+        if (alreadyAtTarget || this.lastRedirectKey === key) {
+          return;
+        }
+        
+        // Quiesce current session
+        this.stopListening();
+        this.clearAudioQueue();
+        this.socket?.close();
+
+        // Update config for the new agent
+        this.config.agentId = agentId;
+        this.config.environment = environment || this.config.environment;
+        this.redirected = true; // Mark that a redirect occurred
+        this.lastRedirectKey = key;
+        
+        // Reconnect to the new agent
+        this.connect()
+          .then(() => this.startListening())
+          .catch((error) => logger.error("[WebSocketClient] Error during redirect reconnect:", error));
+      }
+    } catch (e) {
+      logger.error("[WebSocketClient] Error handling control message:", e);
     }
   }
 
@@ -562,7 +621,24 @@ export class WebSocketClient {
     }
     
     this.isConnected = false;
+    // Clear last redirect idempotence key on explicit disconnect
+    this.lastRedirectKey = null;
     
+    // If we had redirected, restore initial agent/environment so the next connect
+    // returns to the original target unless app overrides explicitly.
+    if (this.redirected) {
+      this.config.agentId = this.initialAgentId;
+      this.config.environment = this.initialEnvironment;
+      this.config.customParameters = {
+        ...(this.config.customParameters || {}),
+        agentId: this.config.agentId,
+        environment: this.config.environment || "",
+        inputType: "mic",
+      };
+      this.redirected = false;
+      logger.info(`[WebSocketClient] Restored initial agent after redirect: agent=${this.config.agentId} env=${this.config.environment}`);
+    }
+
     if (this.onConnectionClose) {
       this.onConnectionClose();
     }
