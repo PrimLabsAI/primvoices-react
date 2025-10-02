@@ -85,6 +85,13 @@ export class WebSocketClient {
   private initialAgentId: string;
   private initialEnvironment?: string;
   private redirected = false;
+  
+  // Playback scheduling
+  private scheduledSources: AudioBufferSourceNode[] = [];
+  private nextPlaybackTime = 0; // audioContext time for next start
+  private scheduledMarkTimers: number[] = [];
+  private readonly minPrebufferSeconds = 0.25; // initial prebuffer to avoid choppiness
+  private readonly scheduleHorizonSeconds = 1.0; // keep at least this much scheduled ahead
 
   // Callbacks
   private onConnectionOpen: StatusCallback | null = null;
@@ -741,11 +748,7 @@ export class WebSocketClient {
    */
   private addToAudioQueue(audioData: Float32Array, sampleRate = 16000, mark?: Mark): void {
     this.audioQueue.push({ data: audioData, sampleRate, mark });
-    
-    // Start playing if not already playing
-    if (!this.isPlaying) {
-      this.playNextInQueue();
-    }
+    this.schedulePlayback();
   }
 
   /**
@@ -754,26 +757,26 @@ export class WebSocketClient {
   private clearAudioQueue(): void {
     this.audioQueue = [];
     
+    // Stop any currently playing source
     if (this.currentAudioSource) {
-      // Disconnect from analyzer first
-      if (this.analyser) {
-        try {
-          this.currentAudioSource.disconnect(this.analyser);
-        } catch (error) {
-          // Ignore errors if already disconnected
-        }
-      }
-      
-      // Stop and disconnect the current source
-      try {
-        this.currentAudioSource.stop();
-        this.currentAudioSource.disconnect();
-      } catch (error) {
-        // Ignore errors if already stopped
-      }
-      
+      try { this.currentAudioSource.stop(); } catch (e) {}
+      try { this.currentAudioSource.disconnect(); } catch (e) {}
       this.currentAudioSource = null;
     }
+    
+    // Stop all scheduled sources
+    this.scheduledSources.forEach((source) => {
+      try { source.stop(); } catch (e) {}
+      try { source.disconnect(); } catch (e) {}
+    });
+    this.scheduledSources = [];
+    
+    // Clear any scheduled mark timers
+    this.scheduledMarkTimers.forEach((id) => clearTimeout(id));
+    this.scheduledMarkTimers = [];
+    
+    // Reset scheduling cursor
+    this.nextPlaybackTime = 0;
     
     this.isPlaying = false;
   }
@@ -808,64 +811,137 @@ export class WebSocketClient {
       return;
     }
     
-    // Get the next audio chunk from the queue
-    const audioItem = this.audioQueue.shift();
-    if (!audioItem) return;
-    
-    const { data: audioData, sampleRate, mark } = audioItem;
+    // Legacy method now delegates to scheduler for gapless playback
+    this.schedulePlayback();
+  }
 
-    if (mark) {
-      if (mark && this.socket && this.socket.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({
-          event: "mark",
-          streamSid: this.streamSid,
-          mark: mark.mark
-        }));
-        logger.debug(`[WebSocketClient] Sent mark event: ${mark}`);
+  /**
+   * Compute total buffered audio seconds currently in the queue (excluding marks)
+   */
+  private getBufferedSecondsInQueue(): number {
+    return this.audioQueue.reduce((sum, item) => {
+      if (item.mark || item.data.length === 0 || item.sampleRate <= 0) return sum;
+      return sum + item.data.length / item.sampleRate;
+    }, 0);
+  }
+
+  /**
+   * Ensure playback is started and enough audio is scheduled ahead to avoid gaps
+   */
+  private schedulePlayback(): void {
+    if (!this.audioContext) return;
+
+    // If not currently playing, wait for prebuffer before starting
+    if (!this.isPlaying) {
+      const buffered = this.getBufferedSecondsInQueue();
+      if (buffered <= 0) return;
+
+      if (buffered < this.minPrebufferSeconds) {
+        // Not enough to start yet
+        return;
       }
-      
-      this.playNextInQueue();
-      return;
-    }
-    
-    // Create an audio buffer with the appropriate sample rate
-    const audioBuffer = this.audioContext.createBuffer(1, audioData.length, sampleRate);
-    audioBuffer.getChannelData(0).set(audioData);
-    
-    // Create a source node and connect it to the destination
-    this.currentAudioSource = this.audioContext.createBufferSource();
-    this.currentAudioSource.buffer = audioBuffer;
-    
-    // Connect to the analyzer for monitoring playback audio levels
-    if (this.analyser) {
-      this.currentAudioSource.connect(this.analyser);
-    }
-    
-    // Connect to the destination for playback
-    this.currentAudioSource.connect(this.audioContext.destination);
-    
-    // When this chunk finishes playing, send mark event if exists and play the next one
-    this.currentAudioSource.onended = () => {      
-      if (this.currentAudioSource) {
-        this.currentAudioSource.disconnect();
-        this.currentAudioSource = null;
+
+      // Start playback cursor with a small delay to give headroom
+      const startAt = Math.max(this.audioContext.currentTime + 0.02, this.audioContext.currentTime + this.minPrebufferSeconds);
+      this.nextPlaybackTime = startAt;
+      this.isPlaying = true;
+
+      // Start monitoring and fire start callback
+      if (!this.statsInterval) {
+        this.startAudioStatsMonitoring();
       }
-      
-      this.playNextInQueue();
-    };
-    
-    // Start playback
-    this.currentAudioSource.start();
-    this.isPlaying = true;
-    
-    // Start monitoring audio stats if not already monitoring
-    if (!this.statsInterval) {
-      this.startAudioStatsMonitoring();
+      if (this.onPlayStart) {
+        this.onPlayStart();
+      }
     }
-    
-    // Trigger callback if this is the start of playback
-    if (this.onPlayStart && this.audioQueue.length === 0) {
-      this.onPlayStart();
+
+    // Schedule from queue up to the horizon
+    this.scheduleFromQueue();
+  }
+
+  /**
+   * Schedule queued items contiguously at nextPlaybackTime up to a horizon
+   */
+  private scheduleFromQueue(): void {
+    if (!this.audioContext) return;
+
+    // Keep scheduling while we have items and we're within the horizon
+    while (this.audioQueue.length > 0) {
+      const timeAhead = this.nextPlaybackTime - this.audioContext.currentTime;
+      if (timeAhead > this.scheduleHorizonSeconds) break;
+
+      const item = this.audioQueue.shift();
+      if (!item) break;
+
+      const { data, sampleRate, mark } = item;
+
+      if (mark) {
+        // Schedule mark to be sent when playback reaches this point
+        const delayMs = Math.max(0, (this.nextPlaybackTime - this.audioContext.currentTime) * 1000);
+        const id = window.setTimeout(() => {
+          if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({
+              event: "mark",
+              streamSid: this.streamSid,
+              mark: mark.mark
+            }));
+            logger.debug(`[WebSocketClient] Sent mark event (scheduled): ${mark.mark?.name}`);
+          }
+        }, delayMs);
+        this.scheduledMarkTimers.push(id);
+        // Marks don't advance time
+        continue;
+      }
+
+      if (data.length === 0 || sampleRate <= 0) {
+        continue;
+      }
+
+      // Create buffer and source
+      const audioBuffer = this.audioContext.createBuffer(1, data.length, sampleRate);
+      audioBuffer.getChannelData(0).set(data);
+
+      const source = this.audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+
+      if (this.analyser) {
+        source.connect(this.analyser);
+      }
+      source.connect(this.audioContext.destination);
+
+      // Cleanup on end and detect when finished
+      source.onended = () => {
+        // Remove from scheduled sources list
+        this.scheduledSources = this.scheduledSources.filter((s) => s !== source);
+        try { source.disconnect(); } catch (e) {}
+
+        // If nothing left scheduled and queue is empty, stop state
+        if (this.scheduledSources.length === 0 && this.audioQueue.length === 0) {
+          this.isPlaying = false;
+          if (!this.isListening) {
+            this.stopAudioStatsMonitoring();
+          }
+          if (this.onPlayStop) {
+            this.onPlayStop();
+          }
+        }
+      };
+
+      // Schedule start
+      const startAt = Math.max(this.audioContext.currentTime + 0.005, this.nextPlaybackTime);
+      try {
+        source.start(startAt);
+      } catch (e) {
+        // In case of invalid state, start immediately
+        source.start();
+      }
+      this.scheduledSources.push(source);
+
+      // Advance playback cursor by buffer duration (in audioContext time domain)
+      const duration = audioBuffer.duration;
+      this.nextPlaybackTime = startAt + duration;
+      // Keep reference to current source for compatibility
+      this.currentAudioSource = source;
     }
   }
 
