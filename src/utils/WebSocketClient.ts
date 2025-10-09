@@ -90,6 +90,7 @@ export class WebSocketClient {
   private scheduledSources: AudioBufferSourceNode[] = [];
   private nextPlaybackTime = 0; // audioContext time for next start
   private scheduledMarkTimers: number[] = [];
+  private scheduleTimer: number | null = null;
   private readonly minPrebufferSeconds = 0.25; // initial prebuffer to avoid choppiness
   private readonly scheduleHorizonSeconds = 1.0; // keep at least this much scheduled ahead
 
@@ -775,6 +776,12 @@ export class WebSocketClient {
     this.scheduledMarkTimers.forEach((id) => clearTimeout(id));
     this.scheduledMarkTimers = [];
     
+    // Stop scheduler
+    if (this.scheduleTimer) {
+      clearInterval(this.scheduleTimer);
+      this.scheduleTimer = null;
+    }
+    
     // Reset scheduling cursor
     this.nextPlaybackTime = 0;
     
@@ -853,6 +860,13 @@ export class WebSocketClient {
       if (this.onPlayStart) {
         this.onPlayStart();
       }
+      
+      // Start lightweight scheduler to keep horizon filled
+      if (!this.scheduleTimer) {
+        this.scheduleTimer = window.setInterval(() => {
+          this.scheduleFromQueue();
+        }, 50);
+      }
     }
 
     // Schedule from queue up to the horizon
@@ -915,6 +929,9 @@ export class WebSocketClient {
         this.scheduledSources = this.scheduledSources.filter((s) => s !== source);
         try { source.disconnect(); } catch (e) {}
 
+        // Try to schedule more immediately if available
+        this.scheduleFromQueue();
+
         // If nothing left scheduled and queue is empty, stop state
         if (this.scheduledSources.length === 0 && this.audioQueue.length === 0) {
           this.isPlaying = false;
@@ -923,6 +940,10 @@ export class WebSocketClient {
           }
           if (this.onPlayStop) {
             this.onPlayStop();
+          }
+          if (this.scheduleTimer) {
+            clearInterval(this.scheduleTimer);
+            this.scheduleTimer = null;
           }
         }
       };
