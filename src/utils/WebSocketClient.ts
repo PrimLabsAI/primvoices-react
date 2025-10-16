@@ -26,7 +26,8 @@ export interface WebSocketClientConfig {
   logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
   serverUrl?: string;
   apiUrl?: string;
-  customParameters?: Record<string, string>,
+  customParameters?: Record<string, string>;
+  canary?: boolean;
 }
 
 interface Mark {
@@ -163,6 +164,11 @@ export class WebSocketClient {
     const queryParams = new URLSearchParams();
     queryParams.set("inputType", "mic");
     queryParams.set("environment", this.config.environment || "");
+
+    // Add canary parameter if enabled
+    if (this.config.canary) {
+      queryParams.set("canary", "true");
+    }
 
     if (this.config.customParameters) {
       Object.entries(this.config.customParameters).forEach(([key, value]) => {
