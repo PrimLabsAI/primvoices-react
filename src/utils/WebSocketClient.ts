@@ -26,7 +26,8 @@ export interface WebSocketClientConfig {
   logLevel?: "DEBUG" | "INFO" | "WARN" | "ERROR";
   serverUrl?: string;
   apiUrl?: string;
-  customParameters?: Record<string, string>,
+  customParameters?: Record<string, string>;
+  canary?: boolean;
 }
 
 interface Mark {
@@ -212,10 +213,17 @@ export class WebSocketClient {
       this.config.customParameters = agentConfiguration.parameters;
     }
     
+    // Construct the WebSocket URL with canary parameter if enabled
+    let wsUrl = this.config.serverUrl;
+    if (this.config.canary) {
+      const separator = wsUrl.includes('?') ? '&' : '?';
+      wsUrl = `${wsUrl}${separator}canary=true`;
+    }
+    
     // Create and setup new WebSocket connection
-    this.socket = new WebSocket(this.config.serverUrl);
+    this.socket = new WebSocket(wsUrl);
 
-    logger.info(`[WebSocketClient] Connecting to ${this.config.serverUrl}`);
+    logger.info(`[WebSocketClient] Connecting to ${wsUrl}`);
     logger.info(`[WebSocketClient] Session IDs: call=${this.callSid}, stream=${this.streamSid}`);
 
     return new Promise((resolve, reject) => {        
