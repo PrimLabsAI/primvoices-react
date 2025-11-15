@@ -28,7 +28,7 @@ export interface WebSocketClientConfig {
   apiUrl?: string;
   customParameters?: Record<string, string>;
   canary?: boolean;
-  tracingEnabled?: boolean;
+  origin?: "debugger" | "web";
 }
 
 interface Mark {
@@ -242,7 +242,7 @@ export class WebSocketClient {
           agentId: this.config.agentId,
           environment: this.config.environment || "",
           inputType: "mic",
-          tracingEnabled: this.config.tracingEnabled?.toString() ?? "",
+          origin: this.config.origin || "",
         } as Record<string, string>;
         
         // Send start message following the format in audio.ts
